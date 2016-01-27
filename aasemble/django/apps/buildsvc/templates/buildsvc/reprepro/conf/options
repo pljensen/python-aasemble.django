@@ -1,1 +1,1 @@
-outdir {{ repository.outdir }}
+outdir {{ outdir }}
