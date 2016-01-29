@@ -159,7 +159,7 @@ class SourcePackageVersion(models.Model):
             if value:
                 data[field] = str(value)
 
-        data['Directory'] = 'pool/main/%s/%s' % (data['Package'][0], data['Package'])
+        data['Directory'] = self.source_package.directory
 
         all_spvf = self.sourcepackageversionfile_set.all()
 
@@ -187,7 +187,9 @@ class SourcePackageVersion(models.Model):
                        'sha1sum': hashlib.sha1(contents).hexdigest(),
                        'sha256sum': hashlib.sha256(contents).hexdigest(),
                        'size': len(contents)}
-            fileobjs += [SourcePackageVersionFile(**kwargs2)]
+            spvf = SourcePackageVersionFile(**kwargs2)
+            spvf.original_filename = f
+            fileobjs += [spvf]
 
         validate_fileset(kwargs['format'], fileobjs)
 
@@ -196,6 +198,7 @@ class SourcePackageVersion(models.Model):
         for f in fileobjs:
             f.source_package_version = spv
             f.save()
+            f.store(f.original_filename)
 
         repository.first_series().source_packages.add(spv)
         return spv

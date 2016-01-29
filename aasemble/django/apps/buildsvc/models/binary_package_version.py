@@ -1,7 +1,11 @@
 import hashlib
+import os.path
 
 import deb822
 
+from django.conf import settings
+from django.core.files.base import File
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 
 from aasemble.django.apps.buildsvc.models.architecture import Architecture
@@ -71,13 +75,18 @@ class BinaryPackageVersion(models.Model):
                     'Section',
                     'Homepage')
 
-    fileinfo_fields = ('Size',
+    fileinfo_fields = ('Filename',
                        'MD5Sum',
                        'SHA1Sum',
                        'SHA256Sum')
 
     def __str__(self):
         return '%s_%s_%s' % (self.binary_package.name, self.version, self.binary_build.architecture)
+
+    @property
+    def filename(self):
+        sp = self.binary_build.source_package_version.source_package
+        return 'pool/main/%s/%s/%s_%s_%s.deb' % (sp.name[0], sp.name, self.binary_package.name, self.version, self.architecture)
 
     def format_for_packages(self):
         data = deb822.Deb822()
@@ -90,13 +99,21 @@ class BinaryPackageVersion(models.Model):
             if value:
                 data[field] = str(value)
 
-        data['Filename'] = 'pool/main/%s/%s/%s_%s_%s.deb' % (data['Source'][0], data['Source'], self.binary_package.name, self.version, self.architecture)
+        data['Filename'] = self.filename
 
         for field in self.fileinfo_fields:
             data[field] = str(getattr(self, field.lower().replace('-', '_')))
 
         data['Description'] = join_description(self.short_description, self.long_description)
         return str(data)
+
+    def store(self, fpath):
+        destpath = os.path.join(self.binary_build.source_package_version.source_package.repository.user.username,
+                                self.binary_build.source_package_version.source_package.repository.name,
+                                self.filename)
+        storage = FileSystemStorage(location=settings.BUILDSVC_REPOS_BASE_PUBLIC_DIR)
+        with open(fpath, 'rb') as fp:
+            storage.save(destpath, File(fp))
 
     @classmethod
     def import_file(cls, repository, path):
@@ -144,4 +161,5 @@ class BinaryPackageVersion(models.Model):
         kwargs['sha256sum'] = hashlib.sha256(contents).hexdigest()
         kwargs['size'] = len(contents)
 
-        cls.objects.get_or_create(**kwargs)
+        self, _ = cls.objects.get_or_create(**kwargs)
+        self.store(path)

@@ -15,3 +15,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         repo = Repository.objects.get(user__username=options['user'], name=options['repository'])
         BinaryPackageVersion.import_file(repo, options['path'])
+        repo.export()
