@@ -128,13 +128,14 @@ class AasembleDriver(RepositoryDriver):
     def key_data(self):
         return GPGDriver().key_data(self.repository)
 
-    def get_checksums(self, contents):
-        return {'md5': hashlib.md5(contents).hexdigest(),
+    def get_metadata(self, contents):
+        return {'size': len(contents),
+                'md5': hashlib.md5(contents).hexdigest(),
                 'sha1': hashlib.sha1(contents).hexdigest(),
                 'sha256': hashlib.sha256(contents).hexdigest()}
 
-    def store(self, path, contents, checksums, gzip=False, bzip2=False):
-        checksums[path] = self.get_checksums(contents)
+    def store(self, path, contents, metadata, gzip=False, bzip2=False):
+        metadata[path] = self.get_metadata(contents)
         self.storage.save(path, ContentFile(contents))
         if gzip:
             gzpath = path + '.gz'
@@ -142,68 +143,68 @@ class AasembleDriver(RepositoryDriver):
             with gzipmod.GzipFile(fileobj=fp, mode='w') as gzfp:
                 gzfp.write(contents)
                 gzfp.close()
-            checksums[gzpath] = self.get_checksums(fp.getvalue())
+            metadata[gzpath] = self.get_metadata(fp.getvalue())
             self.storage.save(gzpath, ContentFile(fp.getvalue()))
         if bzip2:
             bzpath = path + '.bz2'
             bzdata = bzip2.compress(contents)
-            checksums[bzpath] = self.get_checksums(bzdata)
+            metadata[bzpath] = self.get_metadata(bzdata)
             self.storage.save(bzpath, ContentFile(bzdata))
+
+    def render_to_string(self, tmpl, **context):
+        return render_to_string(os.path.join(os.path.dirname(__file__),
+                                'templates/buildsvc/repodriver', tmpl),
+                                context)
 
     def export(self):
         self.ensure_key()
-        checksums = {}
+        metadata = {}
         repo_dir = os.path.join(self.repository.user.username,
                                 self.repository.name)
+        dists_dir = os.path.join(repo_dir, 'dists')
         for series in self.repository.series.all():
-            series_dir = os.path.join(repo_dir,
-                                      'dists',
+            series_dir = os.path.join(dists_dir,
                                       series.name)
             for component in ['main']:
                 for architecture in ['amd64']:
                     arch_dir = os.path.join(series_dir, component,
                                             'binary-%s' % (architecture,))
-                    self.store(os.path.join(arch_dir, 'Packages'), '', checksums, gzip=True)
+                    self.store(os.path.join(arch_dir, 'Packages'), '', metadata, gzip=True)
                     self.store(os.path.join(arch_dir, 'Release'),
-                               '''Archive: %s
-Component: %s
-Origin: %s
-Label: %s
-Architecture: %s
-Description: %s %s
-''' % (series.name, component, self.repository.name.capitalize(), self.repository.name.capitalize(), architecture, self.repository.name, series.name), checksums)
+                               self.render_to_string('archrelease.tmpl',
+                                                     series=series,
+                                                     architecture=architecture,
+                                                     component=component), metadata)
                 for architecture in ['source']:
                     arch_dir = os.path.join(series_dir,
                                             component,
                                             architecture)
-                    self.store(os.path.join(arch_dir, 'Sources'), '', checksums=checksums, gzip=True)
-
+                    self.store(os.path.join(arch_dir, 'Sources'), '', metadata=metadata, gzip=True)
                     self.store(os.path.join(arch_dir, 'Release'),
-                               '''Archive: %s
-Component: %s
-Origin: %s
-Label: %s
-Architecture: %s
-Description: %s %s
-''' % (series.name, component, self.repository.name.capitalize(), self.repository.name.capitalize(), architecture, self.repository.name, series.name), checksums)
-            release_data = '''Origin: %s
-Label: %s
-Suite: %s
-Codename: %s
-Date: Wed, 20 Jan 2016 08:55:57 UTC
-Architectures: amd64 source
-Components: main
-Description: %s %s
-''' % (self.repository.name.capitalize(), self.repository.name.capitalize(), series.name, series.name, self.repository.name, series.name)
+                               self.render_to_string('archrelease.tmpl',
+                                                     series=series,
+                                                     architecture=architecture,
+                                                     component=component), metadata)
+
+            strip_len = len(series_dir) + 1
+
+            files = []
+            for f in sorted(metadata.keys()):
+                metadata[f]['path'] = f[strip_len:]
+                files.append(metadata[f])
+
+            release_data = self.render_to_string('distrelease.tmpl', series=series, files=files)
+
             self.store(os.path.join(series_dir, 'InRelease'),
-                       GPGDriver().sign_inline(release_data), checksums)
+                       GPGDriver().sign_inline(release_data), metadata)
             self.store(os.path.join(series_dir, 'Release'),
-                       release_data, checksums)
+                       release_data, metadata)
             self.store(os.path.join(series_dir, 'Release.gpg'),
-                       GPGDriver().get_signature(release_data), checksums)
+                       GPGDriver().get_signature(release_data), metadata)
             repo_file = os.path.join(repo_dir, 'repo.key')
             if not self.storage.exists(repo_file):
                 self.storage.save(repo_file, ContentFile(self.repository.key_data))
+            import ipdb;ipdb.set_trace()
 
 
 class RepreproDriver(RepositoryDriver):
