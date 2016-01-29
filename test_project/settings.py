@@ -36,6 +36,7 @@ INSTALLED_APPS = (
     'rest_framework.authtoken',
     'kombu.transport.django',
     'corsheaders',
+    'django_extensions',
     'rest_auth',
     'rest_auth.registration',
     'allauth',

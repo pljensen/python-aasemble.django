@@ -11,9 +11,14 @@ class Series(models.Model):
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     repository = models.ForeignKey(Repository, related_name='series')
+    source_packages = models.ManyToManyField('SourcePackageVersion')
 
     def __str__(self):
         return '%s/%s' % (self.repository.name, self.name)
+
+    def binary_package_versions(self):
+        from aasemble.django.apps.buildsvc.models.binary_package_version import BinaryPackageVersion
+        return BinaryPackageVersion.objects.filter(binary_build__source_package_version__in=self.source_packages.all())
 
     def binary_source_list(self, force_trusted=False):
         return self._source_list(prefix='deb', force_trusted=force_trusted)

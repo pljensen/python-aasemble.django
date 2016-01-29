@@ -136,6 +136,7 @@ class AasembleDriver(RepositoryDriver):
 
     def store(self, path, contents, metadata, gzip=False, bzip2=False):
         metadata[path] = self.get_metadata(contents)
+        self.storage.delete(path)
         self.storage.save(path, ContentFile(contents))
         if gzip:
             gzpath = path + '.gz'
@@ -144,11 +145,13 @@ class AasembleDriver(RepositoryDriver):
                 gzfp.write(contents)
                 gzfp.close()
             metadata[gzpath] = self.get_metadata(fp.getvalue())
+            self.storage.delete(gzpath)
             self.storage.save(gzpath, ContentFile(fp.getvalue()))
         if bzip2:
             bzpath = path + '.bz2'
             bzdata = bzip2.compress(contents)
             metadata[bzpath] = self.get_metadata(bzdata)
+            self.storage.delete(bzpath)
             self.storage.save(bzpath, ContentFile(bzdata))
 
     def render_to_string(self, tmpl, **context):
@@ -169,7 +172,10 @@ class AasembleDriver(RepositoryDriver):
                 for architecture in ['amd64']:
                     arch_dir = os.path.join(series_dir, component,
                                             'binary-%s' % (architecture,))
-                    self.store(os.path.join(arch_dir, 'Packages'), '', metadata, gzip=True)
+                    self.store(os.path.join(arch_dir, 'Packages'),
+                               self.render_to_string('Packages.tmpl',
+                                                     series=series),
+                               metadata, gzip=True)
                     self.store(os.path.join(arch_dir, 'Release'),
                                self.render_to_string('archrelease.tmpl',
                                                      series=series,
@@ -204,7 +210,6 @@ class AasembleDriver(RepositoryDriver):
             repo_file = os.path.join(repo_dir, 'repo.key')
             if not self.storage.exists(repo_file):
                 self.storage.save(repo_file, ContentFile(self.repository.key_data))
-            import ipdb;ipdb.set_trace()
 
 
 class RepreproDriver(RepositoryDriver):
