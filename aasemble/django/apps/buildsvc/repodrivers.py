@@ -185,7 +185,10 @@ class AasembleDriver(RepositoryDriver):
                     arch_dir = os.path.join(series_dir,
                                             component,
                                             architecture)
-                    self.store(os.path.join(arch_dir, 'Sources'), '', metadata=metadata, gzip=True)
+                    self.store(os.path.join(arch_dir, 'Sources'),
+                               self.render_to_string('Sources.tmpl',
+                                                     series=series),
+                               metadata=metadata, gzip=True)
                     self.store(os.path.join(arch_dir, 'Release'),
                                self.render_to_string('archrelease.tmpl',
                                                      series=series,

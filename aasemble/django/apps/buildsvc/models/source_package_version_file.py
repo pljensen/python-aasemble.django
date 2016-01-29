@@ -20,6 +20,7 @@ class SourcePackageVersionFile(models.Model):
     source_package_version = models.ForeignKey(SourcePackageVersion)
     filename = models.CharField(max_length=200)
     file_type = models.SmallIntegerField(choices=SOURCE_PACKAGE_FILE_TYPE_CHOICES, null=False)
+    size = models.IntegerField()
     md5sum = models.CharField(max_length=32)
     sha1sum = models.CharField(max_length=40)
     sha256sum = models.CharField(max_length=64)

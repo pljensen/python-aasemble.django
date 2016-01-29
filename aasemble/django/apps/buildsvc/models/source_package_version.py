@@ -80,21 +80,22 @@ def _extract_info_from_dsc(dsc_file):
         return deb822.Deb822(fp.read())
 
 
-known_fields = ('binary',
-                'architecture',
-                'version',
-                'maintainer',
-                'standards-version',
-                'build-depends',
-                'build-depends-indep',
-                'build-conflicts',
-                'build-conflicts-indep',
-                'homepage',
-                'format')
+known_fields = ('Binary',
+                'Version',
+                'Maintainer',
+                'Standards-Version',
+                'Build-Depends',
+                'Build-Depends-Indep',
+                'Build-Conflicts',
+                'Build-Conflicts-Indep',
+                'Architecture',
+                'Homepage',
+                'Format')
 
 
 def _kwargs_from_control(control, repository, dsc_file, files):
     kwargs = {}
+    lower_known_fields = [f.lower() for f in known_fields]
     for k in control:
         k_lower = k.lower()
         if k_lower == 'source':
@@ -104,7 +105,7 @@ def _kwargs_from_control(control, repository, dsc_file, files):
             if control[k] not in VALID_FORMATS:
                 raise SourcePackageValidationException('Unknown format')
             kwargs[k_lower] = control[k]
-        elif k_lower in known_fields:
+        elif k_lower in lower_known_fields:
             kwargs[k.lower().replace('-', '_')] = control[k]
         elif k_lower in ('checksums-sha1', 'checksums-sha256', 'files'):
             hashfunc = {'files': hashlib.md5,
@@ -149,6 +150,24 @@ class SourcePackageVersion(models.Model):
     class Meta:
         unique_together = ('source_package', 'version')
 
+    def format_for_sources(self):
+        data = deb822.Deb822()
+        data['Package'] = self.source_package.name
+
+        for field in known_fields:
+            value = getattr(self, field.lower().replace('-', '_'))
+            if value:
+                data[field] = str(value)
+
+        data['Directory'] = 'pool/main/%s/%s' % (data['Package'][0], data['Package'])
+
+        all_spvf = self.sourcepackageversionfile_set.all()
+
+        data['Files'] = ''.join(['\n %s %s %s' % (spvf.md5sum, spvf.size, spvf.filename) for spvf in all_spvf])
+        data['Checksums-Sha1'] = ''.join(['\n %s %s %s' % (spvf.sha1sum, spvf.size, spvf.filename) for spvf in all_spvf])
+        data['Checksums-Sha256'] = ''.join(['\n %s %s %s' % (spvf.sha256sum, spvf.size, spvf.filename) for spvf in all_spvf])
+        return str(data)
+
     @classmethod
     def import_file(cls, repository, dsc_file):
         control = _extract_info_from_dsc(dsc_file)
@@ -166,7 +185,8 @@ class SourcePackageVersion(models.Model):
                        'file_type': guess_ftype_from_filename(f),
                        'md5sum': hashlib.md5(contents).hexdigest(),
                        'sha1sum': hashlib.sha1(contents).hexdigest(),
-                       'sha256sum': hashlib.sha256(contents).hexdigest()}
+                       'sha256sum': hashlib.sha256(contents).hexdigest(),
+                       'size': len(contents)}
             fileobjs += [SourcePackageVersionFile(**kwargs2)]
 
         validate_fileset(kwargs['format'], fileobjs)
