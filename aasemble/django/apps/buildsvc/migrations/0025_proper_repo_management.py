@@ -23,7 +23,7 @@ def remove_architectures(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('buildsvc', '0021_repository-driver-feature'),
+        ('buildsvc', '0024_repository-driver-feature'),
     ]
 
     operations = [

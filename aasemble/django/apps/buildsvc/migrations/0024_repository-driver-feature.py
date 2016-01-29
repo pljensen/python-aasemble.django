@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('common', '0001_initial'),
-        ('buildsvc', '0020_auto_20160126_1913'),
+        ('buildsvc', '0023_auto_20160128_1603'),
     ]
 
     operations = [
