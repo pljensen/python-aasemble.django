@@ -170,6 +170,7 @@ class AasembleDriver(RepositoryDriver):
                                       series.name)
             for component in ['main']:
                 for architecture in ['amd64']:
+                    import ipdb;ipdb.set_trace()
                     arch_dir = os.path.join(series_dir, component,
                                             'binary-%s' % (architecture,))
                     self.store(os.path.join(arch_dir, 'Packages'),

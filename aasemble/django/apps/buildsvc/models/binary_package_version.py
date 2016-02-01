@@ -53,8 +53,8 @@ class BinaryPackageVersion(models.Model):
     installed_size = models.IntegerField(null=True)
     size = models.IntegerField()
     md5sum = models.CharField(max_length=32)
-    sha1sum = models.CharField(max_length=40)
-    sha256sum = models.CharField(max_length=64)
+    sha1 = models.CharField(max_length=40)
+    sha256 = models.CharField(max_length=64)
     homepage = models.CharField(max_length=250)
     location = models.CharField(max_length=250)
 
@@ -75,7 +75,8 @@ class BinaryPackageVersion(models.Model):
                     'Section',
                     'Homepage')
 
-    fileinfo_fields = ('Filename',
+    fileinfo_fields = ('Size',
+                       'Filename',
                        'MD5Sum',
                        'SHA1Sum',
                        'SHA256Sum')
@@ -111,9 +112,9 @@ class BinaryPackageVersion(models.Model):
         destpath = os.path.join(self.binary_build.source_package_version.source_package.repository.user.username,
                                 self.binary_build.source_package_version.source_package.repository.name,
                                 self.filename)
-        storage = storage.get_repository_storage_driver()
+        storage_driver = storage.get_repository_storage_driver()
         with open(fpath, 'rb') as fp:
-            storage.save(destpath, File(fp))
+            storage_driver.save(destpath, File(fp))
 
     @classmethod
     def import_file(cls, repository, path):
@@ -146,19 +147,21 @@ class BinaryPackageVersion(models.Model):
                 kwargs[k.lower().replace('-', '_')] = control[k]
             elif k_lower == 'description':
                 kwargs['short_description'], kwargs['long_description'] = split_description(control[k])
-            else:
-                print(k, 'unhandled')
+
+        if not bb_info['source_package']:
+            bb_info['source_package'], _ = SourcePackage.objects.get_or_create(name=path.split('/')[-2], repository=repository)
 
         if all(bb_info.values()):
             spv, _ = SourcePackageVersion.objects.get_or_create(source_package=bb_info['source_package'], version=bb_info['version'])
+            spv.series_set.add(repository.first_series())
             kwargs['binary_build'], _ = BinaryBuild.objects.get_or_create(source_package_version=spv, architecture=bb_info['architecture'])
 
         with open(path, 'rb') as fp:
             contents = fp.read()
 
         kwargs['md5sum'] = hashlib.md5(contents).hexdigest()
-        kwargs['sha1sum'] = hashlib.sha1(contents).hexdigest()
-        kwargs['sha256sum'] = hashlib.sha256(contents).hexdigest()
+        kwargs['sha1'] = hashlib.sha1(contents).hexdigest()
+        kwargs['sha256'] = hashlib.sha256(contents).hexdigest()
         kwargs['size'] = len(contents)
 
         self, _ = cls.objects.get_or_create(**kwargs)
