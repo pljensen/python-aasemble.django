@@ -2,9 +2,9 @@ import os.path
 
 from django.conf import settings
 from django.core.files.base import File
-from django.core.files.storage import FileSystemStorage
 from django.db import models
 
+from aasemble.django.apps.buildsvc import storage
 from aasemble.django.apps.buildsvc.models.source_package_version import SourcePackageVersion
 
 
@@ -34,8 +34,11 @@ class SourcePackageVersionFile(models.Model):
         return '%s' % (self.filename,)
 
     def store(self, fpath):
-        destpath = os.path.join(self.source_package_version.source_package.repository.user.username, self.source_package_version.source_package.repository.name, self.source_package_version.source_package.directory, self.filename)
-        storage = FileSystemStorage(location=settings.BUILDSVC_REPOS_BASE_PUBLIC_DIR)
+        destpath = os.path.join(self.source_package_version.source_package.repository.user.username,
+                                self.source_package_version.source_package.repository.name,
+                                self.source_package_version.source_package.directory,
+                                self.filename)
+        storage = storage.get_repository_storage_driver()
         with open(fpath, 'rb') as fp:
             storage.save(destpath, File(fp))
 

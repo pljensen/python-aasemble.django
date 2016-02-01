@@ -9,12 +9,12 @@ import deb822
 
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.files.storage import FileSystemStorage
 from django.template.loader import render_to_string
 from django.utils.module_loading import import_string
 
 import gnupg
 
+from aasemble.django.apps.buildsvc import storage
 from aasemble.django.common.utils import user_has_feature
 from aasemble.django.utils import ensure_dir, recursive_render, run_cmd
 
@@ -119,7 +119,7 @@ class FakeDriver(RepositoryDriver):
 
 class AasembleDriver(RepositoryDriver):
     def __init__(self, *args, **kwargs):
-        self.storage = FileSystemStorage(location=settings.BUILDSVC_REPOS_BASE_PUBLIC_DIR)
+        self.storage = storage.get_repository_storage_driver()
         super(AasembleDriver, self).__init__(*args, **kwargs)
 
     def generate_key(self):

@@ -1,6 +1,23 @@
 from . import github
 
 
+def get_fileinfo(fpath):
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+    size = 0
+    with open(fpath, 'rb') as fp:
+        while True:
+            buf = fp.read(4*1024*1024)
+            md5.update(buf)
+            sha1.update(buf)
+            sha256.update(buf)
+        kwargs['md5sum'] = hashlib.md5(contents).hexdigest()
+        kwargs['sha1sum'] = hashlib.sha1(contents).hexdigest()
+        kwargs['sha256sum'] = hashlib.sha256(contents).hexdigest()
+        kwargs['size'] = len(contents)
+
+
 def sync_sources_from_github(user):
     from ..models import GithubRepository
 
