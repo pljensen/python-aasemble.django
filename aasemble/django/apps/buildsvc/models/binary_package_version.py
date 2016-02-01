@@ -32,15 +32,16 @@ def join_description(short_description, long_description):
 
 class BinaryPackageVersion(models.Model):
     binary_package = models.ForeignKey(BinaryPackage)
-    version = models.CharField(max_length=200, null=False)
     short_description = models.CharField(max_length=255, null=False, default='')
     long_description = models.TextField(null=False, default="")
     binary_build = models.ForeignKey(BinaryBuild)
     package_type = models.SmallIntegerField(choices=BINARY_PACKAGE_TYPE_CHOICES, default=BINARY_PACKAGE_TYPE_DEB)
+
+    # Well-known fields
+    version = models.CharField(max_length=200, null=False)
     architecture = models.CharField(max_length=32)
-    section = models.TextField(null=True)
-    priority = models.TextField(null=True)
     maintainer = models.TextField(null=True)
+    installed_size = models.IntegerField(null=True)
     depends = models.TextField(null=True)
     recommends = models.TextField(null=True)
     suggests = models.TextField(null=True)
@@ -50,15 +51,21 @@ class BinaryPackageVersion(models.Model):
     pre_depends = models.TextField(null=True)
     enhances = models.TextField(null=True)
     breaks = models.TextField(null=True)
-    installed_size = models.IntegerField(null=True)
+    priority = models.TextField(null=True)
+    section = models.TextField(null=True)
+    homepage = models.CharField(max_length=250)
+
+    # "Fileinfo" fields
     size = models.IntegerField()
     md5sum = models.CharField(max_length=32)
     sha1 = models.CharField(max_length=40)
     sha256 = models.CharField(max_length=64)
-    homepage = models.CharField(max_length=250)
+
+    # Not used? wtf?
     location = models.CharField(max_length=250)
 
-    known_fields = ('Version',
+    # Fields that are part of the model.
+    model_fields = ('Version',
                     'Architecture',
                     'Maintainer',
                     'Installed-Size',
@@ -75,11 +82,19 @@ class BinaryPackageVersion(models.Model):
                     'Section',
                     'Homepage')
 
+    # Fields that have to do with the file itself
     fileinfo_fields = ('Size',
                        'Filename',
                        'MD5Sum',
                        'SHA1Sum',
                        'SHA256Sum')
+
+    # Fields that are derived from other data and thus should
+    # just be ignored if read from the package (otherwise they'd
+    # wind up as user fields and get included twice).
+    generated_fields = ('Package',
+                        'Source',
+                        'Filename')
 
     def __str__(self):
         return '%s_%s_%s' % (self.binary_package.name, self.version, self.binary_build.architecture)
@@ -91,8 +106,8 @@ class BinaryPackageVersion(models.Model):
 
     def format_for_packages(self):
         data = deb822.Deb822()
-        data['Package'] = self.binary_package.name
 
+        data['Package'] = self.binary_package.name
         data['Source'] = self.binary_build.source_package_version.source_package.name
 
         for field in self.known_fields:
@@ -106,6 +121,8 @@ class BinaryPackageVersion(models.Model):
             data[field] = str(getattr(self, field.lower().replace('-', '_')))
 
         data['Description'] = join_description(self.short_description, self.long_description)
+        for bpvuf in self.binarypackageversionuserfield_set.all():
+            data[bpvuf.name] = bpvuf.value
         return str(data)
 
     def store(self, fpath):
@@ -116,19 +133,23 @@ class BinaryPackageVersion(models.Model):
         with open(fpath, 'rb') as fp:
             storage_driver.save(destpath, File(fp))
 
-    @classmethod
-    def import_file(cls, repository, path):
+    def _extract_info_from_deb(self, path):
         from aasemble.django.utils import run_cmd
         out = run_cmd(['dpkg-deb', '-I', path, 'control'])
+        return deb822.Deb822(out)
 
-        control = deb822.Deb822(out)
+    @classmethod
+    def import_file(cls, repository, path):
+        control = self._extract_info_from_deb(path)
 
         bb_info = {'source_package': None,
                    'version': None,
                    'architecture': None}
 
-        known_fields_lowercase = [f.lower() for f in cls.known_fields]
+        model_fields_lowercase = [f.lower() for f in cls.model_fields]
+        ignored_fields_lowercase = [f.lower() for f in (cls.fileinfo_fields + cls.generated_fields)]
 
+        user_fields = []
         kwargs = {}
         for k in control:
             k_lower = k.lower()
@@ -143,10 +164,12 @@ class BinaryPackageVersion(models.Model):
             elif k_lower == 'architecture':
                 bb_info['architecture'] = Architecture.objects.get(name=control[k])
                 kwargs['architecture'] = control[k]
-            elif k_lower in known_fields_lowercase:
+            elif k_lower in model_fields_lowercase:
                 kwargs[k.lower().replace('-', '_')] = control[k]
             elif k_lower == 'description':
                 kwargs['short_description'], kwargs['long_description'] = split_description(control[k])
+            elif k_lower not in ignored_fields_lowercase:
+                user_fields += [BinaryPackageVersionUserField(k, control[k])]
 
         if not bb_info['source_package']:
             bb_info['source_package'], _ = SourcePackage.objects.get_or_create(name=path.split('/')[-2], repository=repository)
@@ -166,3 +189,7 @@ class BinaryPackageVersion(models.Model):
 
         self, _ = cls.objects.get_or_create(**kwargs)
         self.store(path)
+
+        for user_field in user_fields:
+            user_field.binary_package_version = self
+            user_field.save()

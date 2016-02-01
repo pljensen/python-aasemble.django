@@ -147,5 +147,18 @@ class Migration(migrations.Migration):
             name='binarypackage',
             unique_together=set([('name', 'repository')]),
         ),
+        migrations.CreateModel(
+            name='BinaryPackageVersionUserField',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=100)),
+                ('value', models.TextField()),
+                ('binary_package_version', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='buildsvc.BinaryPackageVersion')),
+            ],
+        ),
+        migrations.AlterOrderWithRespectTo(
+            name='binarypackageversionuserfield',
+            order_with_respect_to='binary_package_version',
+        ),
         migrations.RunPython(add_architectures, remove_architectures),
     ]
